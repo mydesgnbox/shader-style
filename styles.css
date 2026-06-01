@@ -113,12 +113,60 @@ body::before{
 }
 .card:hover{ transform:translateY(-4px); border-color:var(--line-2); box-shadow:0 22px 50px -20px #000, 0 0 0 1px #ffffff10; }
 .card .stage{
-  position:relative; aspect-ratio:16/10; overflow:hidden;
+  position:relative; aspect-ratio:16/10; overflow:hidden; background:#070710;
   touch-action:pan-y; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
 }
-.card canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:pan-y; }
+.card .preview-fallback{
+  position:absolute; inset:0; z-index:0; overflow:hidden;
+  background:
+    conic-gradient(from 210deg at 62% 42%, color-mix(in srgb, var(--pa) 86%, transparent), color-mix(in srgb, var(--pb) 70%, transparent), color-mix(in srgb, var(--pc) 82%, transparent), color-mix(in srgb, var(--pa) 86%, transparent)),
+    linear-gradient(140deg, #070710 0%, #101022 48%, #06060e 100%);
+  filter:saturate(1.18) contrast(1.04);
+  opacity:.86;
+}
+.card .preview-fallback::before{
+  content:""; position:absolute; inset:-28%;
+  background:
+    repeating-conic-gradient(from 25deg, #ffffff10 0 1.2deg, transparent 1.2deg 8deg),
+    linear-gradient(115deg, transparent 0 22%, #ffffff16 46%, transparent 68% 100%);
+  mix-blend-mode:screen; opacity:.28; transform:rotate(-8deg);
+}
+.card .preview-fallback::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(180deg, transparent 0%, #05050c40 58%, #05050c 100%);
+}
+.card .preview-fallback span{
+  position:absolute; left:50%; top:45%; transform:translate(-50%, -50%);
+  max-width:82%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font-weight:800; font-size:clamp(22px, 4.4vw, 54px); line-height:1;
+  color:transparent; background:linear-gradient(90deg, var(--pa), var(--pb), var(--pc));
+  -webkit-background-clip:text; background-clip:text;
+  text-shadow:0 12px 42px #000;
+  opacity:.92;
+}
+.card .preview-fallback.preview-particles{
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--pc) 75%, transparent) 0 1px, transparent 2px) 0 0/15px 15px,
+    radial-gradient(circle at 42% 48%, color-mix(in srgb, var(--pa) 72%, transparent) 0 1px, transparent 2px) 4px 7px/17px 17px,
+    linear-gradient(145deg, #070710, color-mix(in srgb, var(--pb) 28%, #05050c), #05050c);
+}
+.card .preview-fallback.preview-distortion{
+  background:
+    repeating-linear-gradient(112deg, transparent 0 18px, #ffffff0c 19px 22px, transparent 23px 42px),
+    conic-gradient(from 145deg at 48% 48%, var(--pa), var(--pb), var(--pc), var(--pa));
+}
+.card .preview-fallback.preview-distortion span{
+  top:43%; max-width:90%; font-size:clamp(18px, 2.8vw, 38px);
+}
+.card .preview-fallback.preview-overlay,
+.card .preview-fallback.preview-type{
+  background:
+    linear-gradient(105deg, color-mix(in srgb, var(--pa) 45%, #05050c), transparent 45% 56%, color-mix(in srgb, var(--pc) 38%, #05050c)),
+    conic-gradient(from 260deg at 50% 50%, #05050c, var(--pb), var(--pc), #05050c);
+}
+.card canvas{ position:absolute; inset:0; z-index:1; width:100%; height:100%; display:block; touch-action:pan-y; }
 .card .grad{
-  position:absolute; inset:0; pointer-events:none;
+  position:absolute; inset:0; z-index:2; pointer-events:none;
   background:linear-gradient(180deg, #05050c00 40%, #05050cc8 100%);
 }
 .card .tag{

@@ -207,6 +207,17 @@
   const grid = document.getElementById('grid');
   const cardViews = [];
   function colorHexes(def){ return ['uColA','uColB','uColC'].map(k=>{const c=def.colors[k];return `rgb(${c[0]},${c[1]},${c[2]})`;}); }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+  }
+  function previewClass(def) {
+    const group = (def.group || def.kind || 'procedural').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return 'preview-' + group;
+  }
+  function fallbackLabel(def) {
+    if (def.scene === 'text' || def.kind === 'fluidtext') return def.text || def.name;
+    return '';
+  }
 
   window.SHADERS.forEach(def => {
     const card = document.createElement('article');
@@ -215,8 +226,13 @@
     card.dataset.group = def.group || 'Procedural';
     const propChips = def.params.filter(p=>p.key!=='uHue').map(p=>`<span>${p.name}</span>`).join('');
     const sw = colorHexes(def).map(c=>`<i style="color:${c};background:${c}"></i>`).join('');
+    const cols = colorHexes(def);
+    const fallback = fallbackLabel(def);
     card.innerHTML = `
       <div class="stage">
+        <div class="preview-fallback ${previewClass(def)}" style="--pa:${cols[0]};--pb:${cols[1]};--pc:${cols[2]}">
+          ${fallback ? `<span>${escapeHtml(fallback)}</span>` : ''}
+        </div>
         <canvas></canvas>
         <div class="grad"></div>
         <span class="tag">${def.tag}</span>
@@ -240,10 +256,9 @@
      cards. Procedural shaders re-init instantly; fluid/particle cards re-seed
      in a frame, so the recycling is visually seamless. */
   // Hard cap on simultaneously-live card contexts. Browsers allow ~16 WebGL
-  // contexts; with 15 cards + the hero + a possible modal we must stay well
-  // under that. When the cap is exceeded (e.g. a very tall window showing many
-  // rows), release the live card farthest from the viewport centre.
-  const MAX_LIVE_CARDS = 11;
+  // contexts; with the hero + modal in play we keep a small buffer and let the
+  // static preview layer cover cards that are not currently assigned a context.
+  const MAX_LIVE_CARDS = 14;
   function ensureView(cv) {
     if (cv.view) return cv.view;
     cv.view = makeView(cv.card.querySelector('canvas'), cv.def, { maxDim: 520, interactive: !!cv.def.interactive, touchCapture: false });
@@ -274,11 +289,20 @@
   function pumpViews() {
     pumpQueued = false;
     cardViews.forEach(c => { if (c.view && !c.wanted) releaseView(c); });
-    const live = cardViews.filter(c => c.view).length;
-    if (live >= MAX_LIVE_CARDS) return;
+    const liveCards = cardViews.filter(c => c.view);
+    const live = liveCards.length;
     const wanted = cardViews.filter(c => c.wanted && !c.view);
     if (!wanted.length) return;
     wanted.sort((a, b) => centerDist(a) - centerDist(b));
+    if (live >= MAX_LIVE_CARDS) {
+      liveCards.sort((a, b) => centerDist(b) - centerDist(a));
+      const farthest = liveCards[0];
+      if (farthest && centerDist(wanted[0]) + 80 < centerDist(farthest)) {
+        releaseView(farthest);
+        ensureView(wanted[0]);
+      }
+      return;
+    }
     ensureView(wanted[0]);
     if (wanted.length > 1 && live + 1 < MAX_LIVE_CARDS) schedulePump(); // one more next frame
   }
