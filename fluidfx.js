@@ -1487,7 +1487,7 @@ window.FluidFX = (() => {
     opts = opts || {};
     const colored = opts.coloredStrokes ?? false;
     const captureTouch = opts.captureTouch ?? false;
-    const touchForceScale = opts.touchForceScale ?? 3.6;
+    const touchForceScale = opts.touchForceScale ?? 5.0;
     const touchRadiusScale = opts.touchRadiusScale ?? 1.8;
     let lastX = 0, lastY = 0, hasPointer = false, lastT = 0, activePointerId = null;
     let strokeColor = hsv2rgb(Math.random(), 1, 1);
