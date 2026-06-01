@@ -2097,12 +2097,22 @@ window.FluidFX = (() => {
     }
   }
 
+  let supportCache;
   function supported() {
+    if (supportCache !== undefined) return supportCache;
     try {
       const c = document.createElement('canvas');
       const gl = c.getContext('webgl2');
-      return !!(gl && gl.getExtension('EXT_color_buffer_float'));
-    } catch (e) { return false; }
+      supportCache = !!(gl && gl.getExtension('EXT_color_buffer_float'));
+      if (gl) {
+        const lose = gl.getExtension('WEBGL_lose_context');
+        if (lose) lose.loseContext();
+      }
+      return supportCache;
+    } catch (e) {
+      supportCache = false;
+      return supportCache;
+    }
   }
 
   return {

@@ -21,9 +21,26 @@
       this.interactive = interactive;
       this.touchCapture = touchCapture;
       this.active = true;
+      this.disposed = false;
+      this.contextLost = false;
       this.mouse = [0.5, 0.5]; // normalized, y-up
       this.unbindPointer = null;
+      this.onContextLost = (e) => {
+        if (this.disposed) return;
+        e.preventDefault();
+        this.contextLost = true;
+        this.ok = false;
+        this.prog = null;
+        this.loc = {};
+      };
+      this.onContextRestored = () => {
+        if (this.disposed) return;
+        this.contextLost = false;
+        this.ok = this.init();
+      };
       this.state = ShaderView.defaultState(def);
+      this.canvas.addEventListener('webglcontextlost', this.onContextLost, false);
+      this.canvas.addEventListener('webglcontextrestored', this.onContextRestored, false);
       this.ok = this.init();
       if (interactive) this.bindMouse();
     }
@@ -107,8 +124,9 @@
     }
 
     render(time) {
-      if (!this.ok || !this.active) return;
+      if (!this.ok || !this.active || this.contextLost) return;
       const gl = this.gl;
+      if (gl.isContextLost && gl.isContextLost()) return;
       this.resize();
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       gl.useProgram(this.prog);
@@ -128,10 +146,19 @@
     }
 
     dispose() {
+      this.disposed = true;
       this.active = false;
+      this.canvas.removeEventListener('webglcontextlost', this.onContextLost, false);
+      this.canvas.removeEventListener('webglcontextrestored', this.onContextRestored, false);
       if (this.unbindPointer) { this.unbindPointer(); this.unbindPointer = null; }
       const gl = this.gl;
-      if (gl) { const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); }
+      if (gl && !(gl.isContextLost && gl.isContextLost())) {
+        const ext = gl.getExtension('WEBGL_lose_context');
+        if (ext) ext.loseContext();
+      }
+      this.gl = null;
+      this.prog = null;
+      this.loc = {};
     }
   }
 
@@ -258,7 +285,7 @@
   // Hard cap on simultaneously-live card contexts. Browsers allow ~16 WebGL
   // contexts; with the hero + modal in play we keep a small buffer and let the
   // static preview layer cover cards that are not currently assigned a context.
-  const MAX_LIVE_CARDS = 14;
+  const MAX_LIVE_CARDS = 10;
   function ensureView(cv) {
     if (cv.view) return cv.view;
     cv.view = makeView(cv.card.querySelector('canvas'), cv.def, { maxDim: 520, interactive: !!cv.def.interactive, touchCapture: false });
