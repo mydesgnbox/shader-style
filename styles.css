@@ -55,7 +55,10 @@ body::before{
 
 /* ============================== Hero ============================== */
 .hero{ position:relative; height:74vh; min-height:520px; overflow:hidden; }
-.hero canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.hero canvas{
+  position:absolute; inset:0; width:100%; height:100%; display:block;
+  touch-action:pan-y; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+}
 .hero .scrim{
   position:absolute; inset:0;
   background:linear-gradient(180deg, #05050c66 0%, transparent 28%, #05050c10 60%, var(--bg) 100%);
@@ -109,8 +112,11 @@ body::before{
   transition:transform .35s cubic-bezier(.2,.7,.2,1), border-color .25s, box-shadow .35s;
 }
 .card:hover{ transform:translateY(-4px); border-color:var(--line-2); box-shadow:0 22px 50px -20px #000, 0 0 0 1px #ffffff10; }
-.card .stage{ position:relative; aspect-ratio:16/10; overflow:hidden; }
-.card canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.card .stage{
+  position:relative; aspect-ratio:16/10; overflow:hidden;
+  touch-action:pan-y; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+}
+.card canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:pan-y; }
 .card .grad{
   position:absolute; inset:0; pointer-events:none;
   background:linear-gradient(180deg, #05050c00 40%, #05050cc8 100%);
@@ -145,8 +151,11 @@ body::before{
   background:#05050cd8; backdrop-filter:blur(10px);
 }
 .modal.open{ display:grid; grid-template-columns:1fr 360px; }
-.modal .view{ position:relative; overflow:hidden; }
-.modal .view canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.modal .view{
+  position:relative; overflow:hidden; overscroll-behavior:contain;
+  touch-action:none; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+}
+.modal .view canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
 .modal .view .toplabel{
   position:absolute; top:22px; left:24px; z-index:2; display:flex; align-items:center; gap:12px;
 }

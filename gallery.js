@@ -14,13 +14,15 @@
 
   /* ---------- one live shader surface ---------- */
   class ShaderView {
-    constructor(canvas, def, { maxDim = 640, interactive = false } = {}) {
+    constructor(canvas, def, { maxDim = 640, interactive = false, touchCapture = false } = {}) {
       this.canvas = canvas;
       this.def = def;
       this.maxDim = maxDim;
       this.interactive = interactive;
+      this.touchCapture = touchCapture;
       this.active = true;
       this.mouse = [0.5, 0.5]; // normalized, y-up
+      this.unbindPointer = null;
       this.state = ShaderView.defaultState(def);
       this.ok = this.init();
       if (interactive) this.bindMouse();
@@ -68,9 +70,28 @@
     bindMouse() {
       const set = (clientX, clientY) => {
         const r = this.canvas.getBoundingClientRect();
-        this.mouse = [ (clientX - r.left)/r.width, 1.0 - (clientY - r.top)/r.height ];
+        if (r.width < 4 || r.height < 4) return;
+        const x = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+        const y = Math.min(1, Math.max(0, 1.0 - (clientY - r.top) / r.height));
+        this.mouse = [x, y];
       };
-      this.canvas.addEventListener('pointermove', e => set(e.clientX, e.clientY));
+      const update = (e) => {
+        if (e.isPrimary === false) return;
+        if (this.touchCapture && e.pointerType === 'touch' && e.cancelable) e.preventDefault();
+        set(e.clientX, e.clientY);
+      };
+      const down = (e) => {
+        update(e);
+        if (this.touchCapture && this.canvas.setPointerCapture) {
+          try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+      };
+      this.canvas.addEventListener('pointerdown', down, { passive:false });
+      this.canvas.addEventListener('pointermove', update, { passive:false });
+      this.unbindPointer = () => {
+        this.canvas.removeEventListener('pointerdown', down);
+        this.canvas.removeEventListener('pointermove', update);
+      };
       // hero also listens on window for ambient motion
     }
 
@@ -108,6 +129,7 @@
 
     dispose() {
       this.active = false;
+      if (this.unbindPointer) { this.unbindPointer(); this.unbindPointer = null; }
       const gl = this.gl;
       if (gl) { const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); }
     }
@@ -224,7 +246,7 @@
   const MAX_LIVE_CARDS = 11;
   function ensureView(cv) {
     if (cv.view) return cv.view;
-    cv.view = makeView(cv.card.querySelector('canvas'), cv.def, { maxDim: 520, interactive: !!cv.def.interactive });
+    cv.view = makeView(cv.card.querySelector('canvas'), cv.def, { maxDim: 520, interactive: !!cv.def.interactive, touchCapture: false });
     cv.view.active = !modalOpen;
     views.add(cv.view);
     return cv.view;
@@ -324,14 +346,28 @@
     freshCanvas.id = 'modal-canvas';
     modalCanvas.replaceWith(freshCanvas);
     modalCanvas = freshCanvas;
-    modalView = makeView(modalCanvas, def, { maxDim: 1400, interactive: true });
+    modalView = makeView(modalCanvas, def, { maxDim: 1400, interactive: true, touchCapture: true });
     views.add(modalView);
 
-    // window-wide mouse so swirl follows everywhere in the view pane
-    document.getElementById('modal-view').onpointermove = (e) => {
+    // view-wide pointer so procedural swirls follow touch as soon as the user
+    // presses, not only after a hover-style pointermove.
+    const modalViewEl = document.getElementById('modal-view');
+    const updateModalPointer = (e) => {
+      if (e.isPrimary === false) return;
+      if (e.pointerType === 'touch' && e.cancelable) e.preventDefault();
       const r = modalCanvas.getBoundingClientRect();
-      modalView.mouse = [ (e.clientX-r.left)/r.width, 1.0-(e.clientY-r.top)/r.height ];
+      if (r.width < 4 || r.height < 4 || !modalView) return;
+      const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      const y = Math.min(1, Math.max(0, 1.0 - (e.clientY - r.top) / r.height));
+      modalView.mouse = [x, y];
     };
+    modalViewEl.onpointerdown = (e) => {
+      updateModalPointer(e);
+      if (modalViewEl.setPointerCapture) {
+        try { modalViewEl.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+    };
+    modalViewEl.onpointermove = updateModalPointer;
 
     document.getElementById('modal-tag').textContent = def.tag;
     document.getElementById('modal-title').textContent = def.name;
@@ -358,6 +394,8 @@
   function closeModal(){
     modalOpen = false;
     modal.classList.remove('open');
+    document.getElementById('modal-view').onpointerdown = null;
+    document.getElementById('modal-view').onpointermove = null;
     document.body.style.overflow = '';
     if (modalView) { views.delete(modalView); modalView.dispose(); modalView = null; }
     if (modalGui) { modalGui.destroy(); modalGui = null; }

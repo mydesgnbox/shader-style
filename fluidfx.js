@@ -1486,15 +1486,32 @@ window.FluidFX = (() => {
   function makePointerDriver(canvas, sim, opts) {
     opts = opts || {};
     const colored = opts.coloredStrokes ?? false;
-    let lastX = 0, lastY = 0, hasPointer = false, lastT = 0;
+    const captureTouch = opts.captureTouch ?? false;
+    const touchForceScale = opts.touchForceScale ?? 3.6;
+    const touchRadiusScale = opts.touchRadiusScale ?? 1.8;
+    let lastX = 0, lastY = 0, hasPointer = false, lastT = 0, activePointerId = null;
     let strokeColor = hsv2rgb(Math.random(), 1, 1);
     let colorTimer = 0;
     const state = { lastInteract: -1e9 };
 
-    const onMove = (e) => {
+    const preventTouchDefault = (e) => {
+      if (captureTouch && e.pointerType === 'touch' && e.cancelable) e.preventDefault();
+    };
+    const acceptsPointer = (e) => {
+      if (e.isPrimary === false) return false;
+      return activePointerId === null || e.pointerId === activePointerId;
+    };
+    const seedPointer = (e) => {
+      lastX = e.clientX;
+      lastY = e.clientY;
+      lastT = e.timeStamp || performance.now();
+      hasPointer = true;
+      state.lastInteract = lastT;
+    };
+    const applySample = (sample, source) => {
       const r = canvas.getBoundingClientRect();
       if (r.width < 4 || r.height < 4) return;
-      const now = e.timeStamp || performance.now();
+      const now = sample.timeStamp || source.timeStamp || performance.now();
       const gap = now - lastT;
       if (gap > 200) hasPointer = false;
       lastT = now;
@@ -1502,26 +1519,61 @@ window.FluidFX = (() => {
         colorTimer += Math.min(Math.max(gap, 0), 100) / 1000 * 10;
         if (!hasPointer || colorTimer >= 1) { if (colorTimer >= 1) colorTimer %= 1; strokeColor = hsv2rgb(Math.random(), 1, 1); }
       }
-      const x = (e.clientX - r.left) / r.width;
-      const y = 1 - (e.clientY - r.top) / r.height;
-      const dx = hasPointer ? (e.movementX || (e.clientX - lastX)) : 0;
-      const dy = hasPointer ? -(e.movementY || (e.clientY - lastY)) : 0;
-      lastX = e.clientX; lastY = e.clientY; hasPointer = true;
-      if (Math.abs(dx) + Math.abs(dy) < 0.25) return;
+      const x = (sample.clientX - r.left) / r.width;
+      const y = 1 - (sample.clientY - r.top) / r.height;
+      const mx = typeof sample.movementX === 'number' && sample.movementX !== 0 ? sample.movementX : sample.clientX - lastX;
+      const my = typeof sample.movementY === 'number' && sample.movementY !== 0 ? sample.movementY : sample.clientY - lastY;
+      const dx = hasPointer ? mx : 0;
+      const dy = hasPointer ? -my : 0;
+      lastX = sample.clientX; lastY = sample.clientY; hasPointer = true;
+      const touch = source.pointerType === 'touch';
+      // A finger drag travels fewer pixels-per-event than a mouse flick (and iOS
+      // never reports movementX/Y), so keep the jitter floor much lower on touch
+      // or slow strokes get swallowed entirely and feel dead.
+      if (Math.abs(dx) + Math.abs(dy) < (touch ? 0.05 : 0.25)) return;
       state.lastInteract = now;
-      const force = sim.splatForce;
+      const force = sim.splatForce * (touch ? touchForceScale : 1);
       const dyeColor = colored ? [strokeColor[0] * 0.3, strokeColor[1] * 0.3, strokeColor[2] * 0.3] : undefined;
-      sim.addSplat(x, y, dx * force, dy * force, dyeColor ? { dyeColor } : undefined);
+      const splatOpts = {};
+      if (touch) splatOpts.radius = sim.splatRadius * touchRadiusScale;
+      if (dyeColor) splatOpts.dyeColor = dyeColor;
+      sim.addSplat(x, y, dx * force, dy * force, Object.keys(splatOpts).length ? splatOpts : undefined);
     };
-    const reset = () => { hasPointer = false; };
-    canvas.addEventListener('pointermove', onMove);
+    const onDown = (e) => {
+      if (!acceptsPointer(e)) return;
+      preventTouchDefault(e);
+      activePointerId = e.pointerId;
+      seedPointer(e);
+      if (canvas.setPointerCapture) {
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+    };
+    const onMove = (e) => {
+      if (!acceptsPointer(e)) return;
+      preventTouchDefault(e);
+      const samples = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : null;
+      if (samples && samples.length) samples.forEach(sample => applySample(sample, e));
+      else applySample(e, e);
+    };
+    const reset = (e) => {
+      if (e && activePointerId !== null && e.pointerId !== activePointerId) return;
+      hasPointer = false;
+      activePointerId = null;
+    };
+    canvas.addEventListener('pointerdown', onDown, { passive: false });
+    canvas.addEventListener('pointermove', onMove, { passive: false });
+    canvas.addEventListener('pointerup', reset);
     canvas.addEventListener('pointerout', reset);
     canvas.addEventListener('pointercancel', reset);
+    canvas.addEventListener('lostpointercapture', reset);
 
     state.detach = () => {
+      canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerup', reset);
       canvas.removeEventListener('pointerout', reset);
       canvas.removeEventListener('pointercancel', reset);
+      canvas.removeEventListener('lostpointercapture', reset);
     };
     return state;
   }
@@ -1606,7 +1658,10 @@ window.FluidFX = (() => {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       }
 
-      this.pointer = makePointerDriver(canvas, this.sim, { coloredStrokes: !!overlayDef.dye });
+      this.pointer = makePointerDriver(canvas, this.sim, {
+        coloredStrokes: !!overlayDef.dye,
+        captureTouch: opts.touchCapture ?? false,
+      });
       this.ok = true;
     }
 
@@ -1788,7 +1843,10 @@ window.FluidFX = (() => {
       this.state = Object.assign({}, P_DEFAULTS, def.state || {});
       if (this.mode === 'plane2d') this.tint = def.tint || [0.18, 0.05, 0.22];
 
-      this.pointer = makePointerDriver(canvas, this.sim, { coloredStrokes: false });
+      this.pointer = makePointerDriver(canvas, this.sim, {
+        coloredStrokes: false,
+        captureTouch: opts.touchCapture ?? false,
+      });
       this.ok = true;
     }
 
@@ -1935,7 +1993,10 @@ window.FluidFX = (() => {
         splatForce: this.sim.splatForce, curlStrength: this.sim.curlStrength,
       }, def.state || {});
 
-      this.pointer = makePointerDriver(canvas, this.sim, { coloredStrokes: true });
+      this.pointer = makePointerDriver(canvas, this.sim, {
+        coloredStrokes: true,
+        captureTouch: opts.touchCapture ?? false,
+      });
       this.ok = true;
     }
 
